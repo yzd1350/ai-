@@ -1,82 +1,82 @@
 /**
- * 向量检索服务 — 在 Supabase 知识库中搜索最相关的文档片段
+ * 知识库检索服务
  *
- * 依赖：
- *   - OpenAI Embeddings API（文本 → 向量）
- *   - Supabase pgvector（向量相似度搜索）
- *
- * 如果 Supabase 未配置，返回空数组（降级为纯模型回答）
+ * 当前方案：PostgreSQL ILIKE 关键词模糊匹配（免 embedding 模型，国内网络友好）
+ * 后续可升级为 pgvector 向量检索（需配置 embedding 服务）
  */
 
-import { OpenAIEmbeddings } from "@langchain/openai";
-import { SupabaseVectorStore } from "@langchain/community/vectorstores/supabase";
 import { createClient } from "@supabase/supabase-js";
 
-let vectorStore = null; // 缓存实例，避免重复创建
+let client = null;
 
-/**
- * 初始化向量存储连接（惰性初始化，只在首次查询时连接）
- */
-function getVectorStore() {
-  if (vectorStore) return vectorStore;
-
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !supabaseKey) {
-    console.warn("[retriever] Supabase 未配置，知识库检索不可用");
+function getClient() {
+  if (client) return client;
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    console.warn("[retriever] Supabase 未配置");
     return null;
   }
-
-  const client = createClient(supabaseUrl, supabaseKey);
-
-  // OpenAI Embeddings 配置
-  const embeddings = new OpenAIEmbeddings({
-    model: "text-embedding-3-small",
-    apiKey: process.env.OPENAI_API_KEY,
-    configuration: {
-      baseURL: process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
-    },
-  });
-
-  vectorStore = new SupabaseVectorStore(embeddings, {
-    client,
-    tableName: "documents",
-    queryName: "match_documents",
-  });
-
-  return vectorStore;
+  client = createClient(url, key);
+  return client;
 }
 
 /**
- * 检索与用户问题最相关的 topK 个知识片段
- * @param {string} question - 用户输入的故障问题
- * @param {number} topK - 返回的片段数量，默认 3
- * @returns {Promise<string[]>} 检索到的文本片段数组
+ * 从中文问题中提取有意义的搜索关键词
+ */
+function extractKeywords(text) {
+  const stopWords = new Set([
+    "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一",
+    "上", "也", "很", "到", "要", "去", "你", "会", "着", "没有", "看", "好",
+    "什么", "怎么", "如何", "为什么", "请问", "出现", "发生", "导致",
+    "帮", "看看", "一下", "这个", "那个", "帮忙", "分析",
+  ]);
+
+  const cleaned = text.replace(/[，。！？、；：""（）【】《》\s,.!?;:'"()\[\]{}<>\/\\|@#$%^&*+=~`-]+/g, " ");
+  const words = cleaned.split(/\s+/).filter((w) => w.length >= 2 && !stopWords.has(w));
+  words.sort((a, b) => b.length - a.length);
+  return words.slice(0, 5);
+}
+
+/**
+ * 搜索与用户问题最相关的知识片段
+ *
+ * @param {string} question
+ * @param {number} topK - 返回数量，默认 3
+ * @returns {Promise<string[]>}
  */
 export async function retrieveContext(question, topK = 3) {
-  const store = getVectorStore();
+  const supabase = getClient();
+  if (!supabase) return [];
 
-  // Supabase 未配置 → 降级为空检索
-  if (!store) {
-    console.log("[retriever] 知识库未配置，跳过向量检索");
+  // 检查知识库是否为空
+  const { count, error: countError } = await supabase
+    .from("documents")
+    .select("*", { count: "exact", head: true });
+
+  if (countError || count === 0) {
+    if (count === 0) console.log("[retriever] 知识库为空，请先导入知识文档");
     return [];
   }
 
+  const keywords = extractKeywords(question);
+  if (keywords.length === 0) return [];
+
   try {
-    const results = await store.similaritySearch(question, topK);
+    // 多个关键词用 OR 拼接做模糊匹配
+    const orClause = keywords.map((kw) => `content.ilike.%${kw}%`).join(",");
+    const { data, error } = await supabase
+      .from("documents")
+      .select("content")
+      .or(orClause)
+      .limit(topK);
 
-    if (results.length === 0) {
-      console.log("[retriever] 检索完成：0 条匹配");
-      return [];
-    }
+    if (error) throw error;
 
-    console.log(
-      `[retriever] 检索完成：${results.length} 条匹配，最高相似度：${(results[0]?.metadata?.similarity || 0).toFixed(3)}`
-    );
-    return results.map((doc) => doc.pageContent);
+    console.log(`[retriever] 匹配 ${data?.length || 0} 条（关键词：${keywords.join(", ")}）`);
+    return data ? data.map((d) => d.content) : [];
   } catch (error) {
     console.error("[retriever] 检索失败：", error.message);
-    return []; // 检索失败不抛错，降级为纯模型回答
+    return [];
   }
 }
