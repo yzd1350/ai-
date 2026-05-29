@@ -1,39 +1,38 @@
 @echo off
 chcp 65001 >nul
-title 机务AI排故助手
+title 机务AI排故助手 - 启动
 
 echo ================================
-echo   机务AI排故助手 - 启动中...
+echo   机务AI排故助手
 echo ================================
 echo.
 
-:: 启动后端 (3001)
-echo [1/2] 启动后端 API (端口 3001)...
-start "排故后端" cmd /c "cd /d %~dp0server && node index.js"
-timeout /t 3 /nobreak >nul
+:: 启动后端
+echo [1/2] 启动后端...
+start "API后端" cmd /k "cd /d %~dp0server && node index.js"
 
-:: 启动前端 (5173)
-echo [2/2] 启动前端页面 (端口 5173)...
-start "排故前端" cmd /c "cd /d %~dp0client && npx vite --host"
-timeout /t 3 /nobreak >nul
+:: 等后端准备好
+echo 等待后端启动...
+timeout /t 4 /nobreak >nul
+
+:: 启动前端
+echo [2/2] 启动前端...
+start "前端页面" cmd /k "cd /d %~dp0client && npx vite --host"
 
 echo.
 echo ================================
 echo   启动完成！
-echo ================================
 echo.
-echo   本机访问:  http://localhost:5173
+echo   本机访问: http://localhost:5173
 echo.
 
-:: 获取并显示本机 IP
-for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do (
-    set ip=%%a
-    set ip=!ip: =!
-    if not "!ip!"=="127.0.0.1" echo   手机/其他设备: http://!ip!:5173
+:: 获取本机 IP
+for /f "tokens=2 delims=: " %%a in ('ipconfig ^| findstr "IPv4"') do (
+  if not "%%a"=="127.0.0.1" (
+    echo   局域网访问: http://%%a:5173
+  )
 )
 
 echo.
-echo ================================
-echo   关闭方法：关掉两个命令行窗口
-echo ================================
+echo   (关掉两个黑窗口 = 关闭服务)
 pause
