@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 
 const STORAGE_KEY = "troubleshoot_history";
 
@@ -10,20 +10,16 @@ const STORAGE_KEY = "troubleshoot_history";
  * { id: string, question: string, summary: string, createdAt: number }
  */
 export function useHistory() {
-  const [records, setRecords] = useState([]);
-
-  // 页面加载时从 localStorage 读取历史
-  useEffect(() => {
+  const [records, setRecords] = useState(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        setRecords(JSON.parse(raw));
-      }
+      return raw ? JSON.parse(raw) : [];
     } catch {
       // 数据损坏时清空
       localStorage.removeItem(STORAGE_KEY);
+      return [];
     }
-  }, []);
+  });
 
   // 每次 records 变化时同步写入 localStorage
   const persist = useCallback((newRecords) => {
@@ -40,7 +36,7 @@ export function useHistory() {
         summary: summary.slice(0, 100),
         createdAt: Date.now(),
       };
-      persist([record, ...records]);
+      persist([record, ...records].slice(0, 50));
     },
     [records, persist]
   );

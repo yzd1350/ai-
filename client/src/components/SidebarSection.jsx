@@ -41,7 +41,7 @@ export function SubSection({ title, defaultOpen = false, children }) {
     <div>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-6 py-2 text-sm
+        className="w-full flex items-center justify-between rounded-md px-2 py-2 text-sm
           text-slate-600 hover:bg-slate-50 transition-colors"
       >
         <span>{title}</span>
@@ -52,7 +52,7 @@ export function SubSection({ title, defaultOpen = false, children }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
       </button>
-      {open && <div className="px-4">{children}</div>}
+      {open && <div className="px-2">{children}</div>}
     </div>
   );
 }

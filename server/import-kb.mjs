@@ -7,12 +7,7 @@
  *   1. 分段 → 2. 智谱 embedding 向量化 → 3. 存入 Supabase
  */
 
-// 直接设置环境变量（dotenv 与 openai 在 .mjs 文件中有内存冲突）
-process.env.SUPABASE_URL = "https://tnvrmmtbueojazywqpdc.supabase.co";
-process.env.SUPABASE_SERVICE_ROLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRudnJtbXRidWVvamF6eXdxcGRjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3OTQ2Mjg2NSwiZXhwIjoyMDk1MDM4ODY1fQ.ZKz_86B98riiOtFEiA3cnPtFBUpWeUN9Do3n0CJvyK0";
-process.env.ZHIPU_API_KEY = "edca98dcb54b4cdbbf931054581c1384.GxXZd0iRHwCLSTkP";
-process.env.ZHIPU_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
-
+import "dotenv/config";
 import { readFileSync, readdirSync, statSync } from "fs";
 import { join, extname, basename } from "path";
 import { createClient } from "@supabase/supabase-js";
@@ -24,16 +19,25 @@ const CHUNK_OVERLAP = 50;
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const zhipuApiKey = process.env.ZHIPU_API_KEY;
+const zhipuBaseUrl = process.env.ZHIPU_BASE_URL || "https://open.bigmodel.cn/api/paas/v4";
 
 if (!supabaseUrl || !supabaseKey) {
   console.error("❌ server/.env 中缺少 SUPABASE_URL 或 SUPABASE_SERVICE_ROLE_KEY");
+  console.error("   请复制 .env.example 或在 server/.env 中补齐 Supabase 配置后再导入知识库。");
+  process.exit(1);
+}
+
+if (!zhipuApiKey) {
+  console.error("❌ server/.env 中缺少 ZHIPU_API_KEY");
+  console.error("   知识库导入需要智谱 Embedding，请先在 server/.env 中配置 ZHIPU_API_KEY。");
   process.exit(1);
 }
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 const ai = new OpenAI({
-  apiKey: process.env.ZHIPU_API_KEY,
-  baseURL: process.env.ZHIPU_BASE_URL,
+  apiKey: zhipuApiKey,
+  baseURL: zhipuBaseUrl,
 });
 
 function listFiles(dir) {

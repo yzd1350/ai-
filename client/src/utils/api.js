@@ -106,3 +106,25 @@ export async function queryTroubleshoot(question) {
     };
   }
 }
+
+/**
+ * 获取后端健康状态，用于前端显示真实配置情况。
+ * 失败时返回 status: "offline"，不阻塞用户继续使用页面。
+ */
+export async function getHealthStatus() {
+  try {
+    const res = await fetch("/api/health");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.warn("[api] 健康检查不可用：", err.message);
+    return {
+      status: "offline",
+      timestamp: null,
+      deepseekConfigured: false,
+      supabaseConfigured: false,
+      embeddingConfigured: false,
+      embeddingProvider: "ZHIPU",
+    };
+  }
+}

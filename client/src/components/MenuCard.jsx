@@ -4,7 +4,7 @@
  */
 export default function MenuCard({ icon: Icon, title, badge, open, onToggle, children }) {
   return (
-    <div className="border border-slate-200 rounded-xl overflow-hidden">
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
       <button
         type="button"
         onClick={onToggle}
@@ -16,7 +16,7 @@ export default function MenuCard({ icon: Icon, title, badge, open, onToggle, chi
           {title}
         </span>
         {badge && (
-          <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-400">
             {badge}
           </span>
         )}

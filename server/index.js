@@ -27,6 +27,8 @@ app.get("/api/health", (req, res) => {
     timestamp: new Date().toISOString(),
     deepseekConfigured: !!process.env.DEEPSEEK_API_KEY && process.env.DEEPSEEK_API_KEY !== "sk-placeholder",
     supabaseConfigured: !!process.env.SUPABASE_URL && !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    embeddingConfigured: !!process.env.ZHIPU_API_KEY,
+    embeddingProvider: "ZHIPU",
   });
 });
 

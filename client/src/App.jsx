@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Layout from "./components/Layout";
 import SearchBox from "./components/SearchBox";
 import ResultCard from "./components/ResultCard";
@@ -6,16 +6,13 @@ import MenuCard from "./components/MenuCard";
 import AvatarDropdown from "./components/AvatarDropdown";
 import { SubSection, InfoRow } from "./components/SidebarSection";
 import { useHistory } from "./hooks/useHistory";
-import { queryTroubleshoot } from "./utils/api";
+import { getHealthStatus, queryTroubleshoot } from "./utils/api";
 
 const ACCOUNT = {
   name: "机务工程师",
   avatarLetter: "E",
-  role: "单用户模式",
-  mode: "离线 Demo",
-  deepseekConfigured: false,
-  openaiConfigured: false,
-  supabaseConfigured: false,
+  role: "训练工作台",
+  mode: "单用户 / 学习 Demo",
 };
 
 /** 历史图标 */
@@ -47,8 +44,37 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [health, setHealth] = useState({
+    status: "checking",
+    deepseekConfigured: false,
+    supabaseConfigured: false,
+    embeddingConfigured: false,
+    embeddingProvider: "ZHIPU",
+  });
 
   const { records, addRecord, removeRecord, clearAll } = useHistory();
+
+  useEffect(() => {
+    let alive = true;
+    getHealthStatus().then((data) => {
+      if (alive) setHealth(data);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const account = useMemo(
+    () => ({
+      ...ACCOUNT,
+      deepseekConfigured: health.deepseekConfigured,
+      supabaseConfigured: health.supabaseConfigured,
+      embeddingConfigured: health.embeddingConfigured,
+      embeddingProvider: health.embeddingProvider || "ZHIPU",
+      serviceOnline: health.status === "ok",
+    }),
+    [health]
+  );
 
   const handleSearch = async (question) => {
     setCurrentQuestion(question);
@@ -114,12 +140,14 @@ export default function App() {
         onToggle={() => setHistoryOpen((v) => !v)}
       >
         {records.length === 0 ? (
-          <p className="text-xs text-slate-400 text-center py-6 px-4">
-            暂无记录，输入故障开始排故
-          </p>
+          <div className="px-4 py-6 text-center">
+            <p className="text-xs font-medium text-slate-500">暂无排故记录</p>
+            <p className="mt-1 text-[11px] text-slate-400">完成一次分析后会自动保存到这里</p>
+          </div>
         ) : (
           <div>
-            <div className="px-4 py-2">
+            <div className="flex items-center justify-between px-4 py-2">
+              <span className="text-[11px] text-slate-400">最多保留 50 条</span>
               <button
                 onClick={clearAll}
                 className="text-xs text-slate-400 hover:text-red-500 transition-colors"
@@ -135,7 +163,7 @@ export default function App() {
                   border-t border-slate-50 transition-colors group"
               >
                 <div className="flex items-start justify-between gap-1">
-                  <p className="text-xs text-slate-800 truncate flex-1">{r.question}</p>
+                  <p className="text-xs font-medium text-slate-800 line-clamp-2 flex-1">{r.question}</p>
                   <button
                     onClick={(e) => { e.stopPropagation(); removeRecord(r.id); }}
                     className="text-slate-300 hover:text-red-400 opacity-0
@@ -147,7 +175,8 @@ export default function App() {
                     </svg>
                   </button>
                 </div>
-                <span className="text-[10px] text-slate-400">{formatTime(r.createdAt)}</span>
+                <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-slate-400">{r.summary}</p>
+                <span className="mt-1 inline-block text-[10px] text-slate-400">{formatTime(r.createdAt)}</span>
               </button>
             ))}
           </div>
@@ -163,16 +192,17 @@ export default function App() {
       >
         <div className="px-4 py-3 space-y-1">
           <SubSection title="账户信息">
-            <InfoRow label="当前模式" value="单用户 / 离线 Demo" />
+            <InfoRow label="当前模式" value="单用户 / 学习 Demo" />
             <InfoRow label="用户名" value="机务工程师" />
           </SubSection>
 
           <SubSection title="API 配置">
-            <InfoRow label="DeepSeek API" value="未配置" badge />
-            <InfoRow label="OpenAI API" value="未配置" badge />
-            <InfoRow label="Supabase" value="未配置" badge />
+            <InfoRow label="后端服务" value={health.status === "ok" ? "在线" : "未连接"} badge={health.status !== "ok"} />
+            <InfoRow label="DeepSeek API" value={health.deepseekConfigured ? "已配置" : "未配置"} badge={!health.deepseekConfigured} />
+            <InfoRow label="智谱 Embedding" value={health.embeddingConfigured ? "已配置" : "未配置"} badge={!health.embeddingConfigured} />
+            <InfoRow label="Supabase" value={health.supabaseConfigured ? "已配置" : "未配置"} badge={!health.supabaseConfigured} />
             <p className="text-xs text-slate-400 mt-1 px-1">
-              在 server/.env 中配置
+              状态来自 /api/health，在 server/.env 中配置
             </p>
           </SubSection>
 
@@ -197,14 +227,14 @@ export default function App() {
         }
       }}
       sidebarContent={sidebarContent}
-      avatarDropdown={<AvatarDropdown account={ACCOUNT} />}
+      avatarDropdown={<AvatarDropdown account={account} />}
     >
       {/* 搜索页 */}
       {pageState === "search" && (
-        <div className="min-h-[80vh] flex flex-col justify-center">
-          <SearchBox onSubmit={handleSearch} isLoading={false} />
+        <div className="min-h-[calc(100vh-6rem)] flex flex-col justify-center">
+          <SearchBox onSubmit={handleSearch} isLoading={false} health={health} historyCount={records.length} />
           {error && (
-            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="mx-auto mt-4 w-full max-w-3xl rounded-2xl border border-red-200 bg-red-50 p-4 shadow-sm">
               <p className="text-sm text-red-700">{error}</p>
             </div>
           )}
@@ -213,26 +243,26 @@ export default function App() {
 
       {/* 加载页 */}
       {pageState === "loading" && (
-        <div className="pt-10 md:pt-16">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-6">
+        <div className="mx-auto w-full max-w-3xl pt-8 md:pt-14">
+          <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs text-slate-400 mb-1">正在分析故障</p>
             <p className="text-slate-800 font-medium">{currentQuestion}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-10 text-center">
+          <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm">
             <div className="flex justify-center mb-4">
               <div className="flex gap-1">
                 {[0, 1, 2].map((i) => (
-                  <div key={i} className="w-2.5 h-2.5 bg-slate-400 rounded-full animate-bounce"
+                  <div key={i} className="h-2.5 w-2.5 animate-bounce rounded-full bg-amber-500"
                     style={{ animationDelay: `${i * 0.15}s` }} />
                 ))}
               </div>
             </div>
-            <p className="text-slate-500 text-sm">正在检索知识库并分析可能原因...</p>
-            <p className="text-slate-400 text-xs mt-2">预计需要 3~10 秒</p>
+            <p className="text-sm font-medium text-slate-700">正在检索知识库并分析可能原因...</p>
+            <p className="mt-2 text-xs text-slate-400">预计需要 3~10 秒，请以 AMM / 工卡为最终依据</p>
           </div>
           <div className="space-y-3 mt-6 animate-pulse">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-white rounded-xl border border-slate-200 p-5">
+              <div key={i} className="rounded-2xl border border-slate-200 bg-white p-5">
                 <div className="h-4 bg-slate-100 rounded w-24 mb-3" />
                 <div className="h-3 bg-slate-50 rounded w-full mb-2" />
                 <div className="h-3 bg-slate-50 rounded w-3/4" />
@@ -244,11 +274,14 @@ export default function App() {
 
       {/* 结果页 */}
       {pageState === "result" && currentResult && (
-        <div className="pt-4">
+        <div className="mx-auto w-full max-w-4xl pt-4">
           <div className="mb-4">
-            <div className="bg-slate-900 text-white rounded-xl p-4">
-              <p className="text-xs text-slate-400 mb-1">故障现象</p>
-              <p className="font-medium">{currentQuestion}</p>
+            <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-medium text-white">当前故障</span>
+                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">训练建议</span>
+              </div>
+              <p className="text-base font-semibold leading-relaxed text-slate-900">{currentQuestion}</p>
             </div>
           </div>
           <ResultCard data={currentResult} onRetry={handleRetry} />
